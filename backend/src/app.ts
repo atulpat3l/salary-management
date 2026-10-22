@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { createAuthRouter } from './modules/auth/auth.routes';
 import { countriesRouter } from './modules/countries/countries.routes';
 import { employeesRouter } from './modules/employees/employees.routes';
+import { insightsRouter } from './modules/insights/insights.routes';
 import { meRouter } from './modules/me/me.routes';
 import { payrollRouter } from './modules/payroll/payroll.routes';
 import { structuresRouter } from './modules/structures/structures.routes';
@@ -31,6 +32,7 @@ export function createApp() {
   app.use('/api/employees', employeesRouter);
   app.use('/api/payroll-runs', payrollRouter);
   app.use('/api/me', meRouter);
+  app.use('/api/insights', insightsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
