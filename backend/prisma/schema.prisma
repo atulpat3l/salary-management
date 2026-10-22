@@ -1,0 +1,108 @@
+// Data model for the Salary Management Tool. Requirement IDs refer to docs/PRD.md.
+//
+// SQLite has no enums in Prisma, so enum-like columns are Strings. Their allowed values
+// live in src/domain/constants.ts and are enforced by validation before anything is saved.
+// Money is stored as Decimal (never Float) so rounding is exact (PRD §5.7, NFR-03).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// A supported country. Each country has exactly one currency (A3, A4, FR-CUR-01).
+model Country {
+  code         String @id // ISO 3166-1 alpha-2, e.g. "US"
+  name         String @unique
+  currencyCode String // ISO 4217, e.g. "USD"
+  locale       String // BCP 47 locale the UI uses to format amounts, e.g. "en-US"
+
+  structures SalaryStructure[]
+  employees  Employee[]
+}
+
+/// A predefined, country-specific salary template (FR-STR-01). Fixed amounts are in the country's currency.
+model SalaryStructure {
+  id                   Int     @id @default(autoincrement())
+  name                 String  @unique
+  style                String // STANDARD | SALES | HOURLY
+  countryCode          String
+  variableTargetPct    Decimal // % of monthly base, e.g. 10 for 10%
+  standardMonthlyHours Int
+  overtimeMultiplier   Decimal // e.g. 1.5
+
+  country    Country              @relation(fields: [countryCode], references: [code])
+  components StructureComponent[]
+  employees  Employee[]
+
+  @@index([countryCode])
+}
+
+/// One earning or deduction line of a salary structure.
+model StructureComponent {
+  id          Int     @id @default(autoincrement())
+  structureId Int
+  kind        String // EARNING | DEDUCTION
+  name        String
+  basis       String // PCT_BASE | PCT_GROSS (deductions only) | FIXED
+  value       Decimal // a percentage for PCT_*, an amount in the country's currency for FIXED
+  sortOrder   Int
+
+  structure SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  @@unique([structureId, name])
+}
+
+/// An employee record (FR-EMP-01..06). Currency is not stored here: it always comes from the country.
+model Employee {
+  id               Int      @id @default(autoincrement())
+  employeeCode     String   @unique // system-assigned, also the login ID (A10)
+  fullName         String
+  jobTitle         String
+  countryCode      String
+  annualBaseSalary Decimal
+  structureId      Int
+  status           String   @default("ACTIVE") // ACTIVE | INACTIVE
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  country   Country         @relation(fields: [countryCode], references: [code])
+  structure SalaryStructure @relation(fields: [structureId], references: [id])
+  account   Account?
+
+  @@index([countryCode, status])
+  @@index([fullName])
+  @@index([jobTitle])
+}
+
+/// Login credentials, kept apart from employee data so a password hash is never loaded with an employee.
+/// HR accounts have no employee; employee accounts are linked 1:1 (FR-AUTH-01, NFR-06).
+model Account {
+  id                 Int      @id @default(autoincrement())
+  loginId            String   @unique
+  passwordHash       String
+  role               String // HR | EMPLOYEE
+  mustChangePassword Boolean  @default(true) // FR-AUTH-04
+  employeeId         Int?     @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+  sessions Session[]
+}
+
+/// A logged-in session. Deleting it logs the user out; it expires after inactivity (FR-AUTH-03).
+model Session {
+  id             String   @id @default(uuid())
+  accountId      Int
+  createdAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}

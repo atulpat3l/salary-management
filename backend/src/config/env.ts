@@ -5,6 +5,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug', 'silent']).default('info'),
+  DATABASE_URL: z.string().startsWith('file:').default('file:./dev.db'),
   CORS_ORIGIN: z
     .string()
     .default('http://localhost:5173')

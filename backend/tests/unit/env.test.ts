@@ -6,8 +6,13 @@ describe('parseEnv', () => {
       NODE_ENV: 'development',
       PORT: 4000,
       LOG_LEVEL: 'info',
+      DATABASE_URL: 'file:./dev.db',
       CORS_ORIGIN: ['http://localhost:5173'],
     });
+  });
+
+  it('rejects a DATABASE_URL that is not a SQLite file URL', () => {
+    expect(() => parseEnv({ DATABASE_URL: 'postgres://localhost/db' })).toThrow(/DATABASE_URL/);
   });
 
   it('coerces PORT to a number and splits CORS_ORIGIN into a trimmed list', () => {

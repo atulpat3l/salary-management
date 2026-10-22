@@ -16,5 +16,5 @@
     "noImplicitReturns": true,
     "noEmit": true
   },
-  "include": ["src", "tests", "prisma"]
+  "include": ["src", "tests", "prisma", "prisma.config.ts"]
 }

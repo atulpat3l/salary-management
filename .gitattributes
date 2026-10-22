@@ -1,0 +1,5 @@
+# Keep LF everywhere (matches Prettier) so Windows checkouts don't show line-ending-only changes.
+* text=auto eol=lf
+*.exe binary
+*.png binary
+*.jpg binary

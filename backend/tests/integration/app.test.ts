@@ -1,13 +1,16 @@
 import request from 'supertest';
 import { createApp } from '../../src/app';
+import { prisma } from '../../src/lib/prisma';
 
 describe('app', () => {
   const app = createApp();
 
-  it('GET /api/health returns ok', async () => {
+  afterAll(() => prisma.$disconnect());
+
+  it('GET /api/health returns ok and confirms the database is reachable', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok' });
+    expect(res.body).toEqual({ status: 'ok', database: 'ok' });
   });
 
   it('sets security headers and hides the framework', async () => {
