@@ -74,7 +74,10 @@ describe('POST /api/payroll-runs — creating a run', () => {
     ]);
 
     const one = await request(app).get(`/api/payroll-runs/${sept.id}`).set(bearer(hrToken));
-    expect(one.body).toEqual(sept);
+    expect(one.body).toEqual({
+      ...sept,
+      summary: { headcount: 0, flaggedCount: 0, byCountry: [] }, // not calculated yet
+    });
   });
 
   it('returns 404 for a run that does not exist', async () => {

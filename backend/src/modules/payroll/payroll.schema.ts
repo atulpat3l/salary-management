@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MAX_ACHIEVEMENT_PCT } from '../../domain/payCalculator';
-import { nonNegativeDecimalSchema } from '../../lib/schemas';
+import { countryCodeSchema, idParamSchema, nonNegativeDecimalSchema } from '../../lib/schemas';
 
 /** A reasonable monthly ceiling that catches typos (PRD Q5; to be confirmed with HR). */
 export const MAX_OVERTIME_HOURS = 100;
@@ -47,3 +47,26 @@ export const saveInputsSchema = z
   });
 
 export type MonthlyInput = z.infer<typeof monthlyInputSchema>;
+
+export const runPayslipParamsSchema = z.object({
+  id: idParamSchema.shape.id,
+  payslipId: idParamSchema.shape.id,
+});
+
+/** FR-PAY-02/03: review a run's payslips, e.g. only the flagged ones, or one country. */
+export const listRunPayslipsQuerySchema = z.object({
+  flagged: z
+    .enum(['true', 'false'], { error: 'Must be true or false' })
+    .transform((value) => value === 'true')
+    .optional(),
+  country: countryCodeSchema.optional(),
+  page: z.coerce.number().int().min(1, 'Must be 1 or more').default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1, 'Must be 1 or more')
+    .max(100, 'Must be at most 100')
+    .default(25),
+});
+
+export type ListRunPayslipsQuery = z.infer<typeof listRunPayslipsQuerySchema>;
