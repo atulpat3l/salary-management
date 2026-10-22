@@ -7,6 +7,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { createAuthRouter } from './modules/auth/auth.routes';
 import { countriesRouter } from './modules/countries/countries.routes';
+import { employeesRouter } from './modules/employees/employees.routes';
 import { structuresRouter } from './modules/structures/structures.routes';
 
 export function createApp() {
@@ -25,6 +26,7 @@ export function createApp() {
   app.use('/api/auth', createAuthRouter());
   app.use('/api/countries', countriesRouter);
   app.use('/api/structures', structuresRouter);
+  app.use('/api/employees', employeesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

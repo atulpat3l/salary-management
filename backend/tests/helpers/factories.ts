@@ -42,7 +42,8 @@ export async function createEmployee(
   const n = next();
   return prisma.employee.create({
     data: {
-      employeeCode: `EMP${String(n).padStart(5, '0')}`,
+      // "TST" so factory codes never clash with the API's generated "EMP#####" codes.
+      employeeCode: `TST${String(n).padStart(5, '0')}`,
       fullName: overrides.fullName ?? `Test Employee ${n}`,
       jobTitle: 'Engineer',
       countryCode,

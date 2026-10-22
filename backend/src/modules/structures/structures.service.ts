@@ -1,5 +1,6 @@
-import type { Prisma } from '../../generated/prisma/client';
+import type { Prisma, SalaryStructure, StructureComponent } from '../../generated/prisma/client';
 import type { ComponentBasis, ComponentKind, StructureStyle } from '../../domain/constants';
+import type { StructureRules } from '../../domain/payCalculator';
 import { AppError } from '../../lib/errors';
 import { toMoney, type Money } from '../../lib/money';
 import { prisma } from '../../lib/prisma';
@@ -32,6 +33,24 @@ export async function getStructure(id: number) {
   });
   if (!structure) throw AppError.notFound('Salary structure not found');
   return toStructureView(structure);
+}
+
+/** Converts a stored structure into the rules the pay calculator understands. */
+export function toStructureRules(
+  structure: SalaryStructure & { components: StructureComponent[] },
+): StructureRules {
+  return {
+    variableTargetPct: structure.variableTargetPct,
+    standardMonthlyHours: structure.standardMonthlyHours,
+    overtimeMultiplier: structure.overtimeMultiplier,
+    components: structure.components.map((c) => ({
+      kind: c.kind as ComponentKind,
+      name: c.name,
+      basis: c.basis as ComponentBasis,
+      value: c.value,
+      sortOrder: c.sortOrder,
+    })),
+  };
 }
 
 async function assertCountryExists(code: string) {
