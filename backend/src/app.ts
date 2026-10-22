@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { prisma } from './lib/prisma';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { createAuthRouter } from './modules/auth/auth.routes';
 
 export function createApp() {
   const app = express();
@@ -18,6 +19,8 @@ export function createApp() {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', database: 'ok' });
   });
+
+  app.use('/api/auth', createAuthRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

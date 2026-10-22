@@ -16,8 +16,8 @@ export class AppError extends Error {
     return new AppError(400, 'VALIDATION_ERROR', message, fields);
   }
 
-  static unauthorized(message = 'Authentication required') {
-    return new AppError(401, 'UNAUTHORIZED', message);
+  static unauthorized(message = 'Authentication required', code = 'UNAUTHORIZED') {
+    return new AppError(401, code, message);
   }
 
   static forbidden(message = 'You do not have access to this resource') {

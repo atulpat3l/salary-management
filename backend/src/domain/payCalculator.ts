@@ -1,7 +1,6 @@
 import type { ComponentBasis, ComponentKind } from './constants';
 import { Decimal, round2, toDecimal, type DecimalLike } from '../lib/money';
 
-
 export interface StructureComponentRule {
   kind: ComponentKind;
   name: string;
