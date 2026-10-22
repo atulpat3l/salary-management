@@ -8,7 +8,12 @@ import { toMoney } from '../../lib/money';
 import { prisma } from '../../lib/prisma';
 import { generateTemporaryPassword, hashPassword } from '../auth/password';
 import { toStructureRules } from '../structures/structures.service';
-import type { CreateEmployeeInput, UpdateEmployeeInput } from './employees.schema';
+import type {
+  CreateEmployeeInput,
+  ListEmployeesQuery,
+  SalaryPreviewInput,
+  UpdateEmployeeInput,
+} from './employees.schema';
 
 const employeeInclude = {
   country: true,
@@ -154,11 +159,17 @@ export async function resetEmployeePassword(id: number) {
   return { temporaryPassword };
 }
 
-/** FR-EMP-01 / FR-EMP-05: the country must be supported and the structure must belong to it. */
+/**
+ * FR-EMP-01 / FR-EMP-05: the country must be supported and the structure must belong to it.
+ * Returns both, so callers can use them without loading them again.
+ */
 async function assertStructureBelongsToCountry(structureId: number, countryCode: string) {
   const [country, structure] = await Promise.all([
     prisma.country.findUnique({ where: { code: countryCode } }),
-    prisma.salaryStructure.findUnique({ where: { id: structureId } }),
+    prisma.salaryStructure.findUnique({
+      where: { id: structureId },
+      include: employeeInclude.structure.include,
+    }),
   ]);
   if (!country) {
     throw AppError.validation('Some fields are invalid', {
@@ -175,6 +186,98 @@ async function assertStructureBelongsToCountry(structureId: number, countryCode:
       structureId: `Choose a salary structure for ${country.name}`,
     });
   }
+  return { country, structure };
+}
+
+/**
+ * FR-FIND-01..04: one page of employees with the total count. Search, filters and sorting
+ * apply to the whole list, not just the current page. The standard monthly salary is
+ * calculated only for the rows on the page.
+ */
+export async function listEmployees(query: ListEmployeesQuery) {
+  const { q, country, jobTitle, status, sort, order, page, pageSize } = query;
+
+  const where: Prisma.EmployeeWhereInput = {
+    // SQLite LIKE: case-insensitive for ASCII, partial match.
+    ...(q && {
+      OR: [{ fullName: { contains: q } }, { employeeCode: { contains: q.toUpperCase() } }],
+    }),
+    ...(country && { countryCode: country }),
+    ...(jobTitle && { jobTitle }),
+    ...(status && { status }),
+  };
+
+  // The id breaks ties so paging is stable. Employee IDs follow the id, so sorting by
+  // "employeeCode" uses it directly (and stays correct past EMP99999).
+  const orderBy: Prisma.EmployeeOrderByWithRelationInput[] = {
+    employeeCode: [{ id: order }],
+    name: [{ fullName: order }, { id: 'asc' as const }],
+    salary: [{ annualBaseSalary: order }, { id: 'asc' as const }],
+  }[sort];
+
+  const [total, employees] = await prisma.$transaction([
+    prisma.employee.count({ where }),
+    prisma.employee.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: employeeInclude,
+    }),
+  ]);
+
+  return {
+    items: employees.map(toEmployeeListItem),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+/**
+ * FR-EMP-06: the standard monthly salary for values not saved yet, so the add/edit form can
+ * show it as HR types. Nothing is stored.
+ */
+export async function previewStandardSalary(input: SalaryPreviewInput) {
+  const { country, structure } = await assertStructureBelongsToCountry(
+    input.structureId,
+    input.countryCode,
+  );
+  const pay = calculatePay(toStructureRules(structure), input.annualBaseSalary);
+  return {
+    currency: country.currencyCode,
+    standardMonthlySalary: toPayBreakdown(pay, country.currencyCode),
+  };
+}
+
+/** The job titles in use, for the list filter and for suggestions during entry (PRD Q4). */
+export async function listJobTitles(countryCode?: string) {
+  const rows = await prisma.employee.findMany({
+    where: countryCode ? { countryCode } : undefined,
+    distinct: ['jobTitle'],
+    select: { jobTitle: true },
+    orderBy: { jobTitle: 'asc' },
+  });
+  return rows.map((row) => row.jobTitle);
+}
+
+/** One row of the employee list (FR-FIND-01): every amount with its currency. */
+function toEmployeeListItem(employee: EmployeeWithDetails) {
+  const currency = employee.country.currencyCode;
+  const standardPay = calculatePay(toStructureRules(employee.structure), employee.annualBaseSalary);
+  return {
+    id: employee.id,
+    employeeCode: employee.employeeCode,
+    fullName: employee.fullName,
+    jobTitle: employee.jobTitle,
+    country: { code: employee.country.code, name: employee.country.name },
+    currency,
+    annualBaseSalary: toMoney(employee.annualBaseSalary, currency),
+    standardMonthlyGross: toMoney(standardPay.gross, currency),
+    standardMonthlyNet: toMoney(standardPay.net, currency),
+    status: employee.status as EmployeeStatus,
+  };
 }
 
 /**
