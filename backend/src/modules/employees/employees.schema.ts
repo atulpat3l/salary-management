@@ -17,3 +17,15 @@ export const createEmployeeSchema = z.object({
 });
 
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
+
+/**
+ * FR-EMP-03: any subset of the editable fields, with the same rules. The Employee ID and status
+ * are not editable here (status changes only through deactivation); unknown keys are ignored.
+ */
+export const updateEmployeeSchema = createEmployeeSchema
+  .partial()
+  .refine((input) => Object.values(input).some((value) => value !== undefined), {
+    message: 'Provide at least one field to change',
+  });
+
+export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;

@@ -3,12 +3,12 @@ import type { Prisma } from '../../generated/prisma/client';
 import type { EmployeeStatus, StructureStyle } from '../../domain/constants';
 import { toPayBreakdown } from '../../domain/payBreakdown';
 import { calculatePay } from '../../domain/payCalculator';
-import { AppError } from '../../lib/errors';
+import { AppError, type FieldErrors } from '../../lib/errors';
 import { toMoney } from '../../lib/money';
 import { prisma } from '../../lib/prisma';
 import { generateTemporaryPassword, hashPassword } from '../auth/password';
 import { toStructureRules } from '../structures/structures.service';
-import type { CreateEmployeeInput } from './employees.schema';
+import type { CreateEmployeeInput, UpdateEmployeeInput } from './employees.schema';
 
 const employeeInclude = {
   country: true,
@@ -62,6 +62,96 @@ export async function getEmployee(id: number) {
   const employee = await prisma.employee.findUnique({ where: { id }, include: employeeInclude });
   if (!employee) throw AppError.notFound('Employee not found');
   return toEmployeeDetail(employee);
+}
+
+async function findEmployeeOrThrow(id: number) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw AppError.notFound('Employee not found');
+  return employee;
+}
+
+/**
+ * FR-EMP-03: saves changes. Changing the country requires a new salary (in the new currency)
+ * and a structure for the new country; the old amount is never converted. Payslips already
+ * issued are snapshots, so they are not affected (FR-PAY-05).
+ */
+export async function updateEmployee(id: number, input: UpdateEmployeeInput) {
+  const current = await findEmployeeOrThrow(id);
+  const countryCode = input.countryCode ?? current.countryCode;
+
+  if (countryCode !== current.countryCode) {
+    const country = await prisma.country.findUnique({ where: { code: countryCode } });
+    if (!country) {
+      throw AppError.validation('Some fields are invalid', {
+        countryCode: 'Not a supported country',
+      });
+    }
+    const fields: FieldErrors = {};
+    if (input.annualBaseSalary === undefined) {
+      fields.annualBaseSalary = `Re-enter the annual base salary in ${country.currencyCode} for ${country.name}`;
+    }
+    if (input.structureId === undefined) {
+      fields.structureId = `Choose a salary structure for ${country.name}`;
+    }
+    if (Object.keys(fields).length > 0) {
+      throw AppError.validation(
+        'Changing the country requires a new salary and salary structure',
+        fields,
+      );
+    }
+  }
+
+  if (input.structureId !== undefined) {
+    await assertStructureBelongsToCountry(input.structureId, countryCode);
+  }
+
+  const employee = await prisma.employee.update({
+    where: { id },
+    data: input,
+    include: employeeInclude,
+  });
+  return toEmployeeDetail(employee);
+}
+
+/**
+ * FR-EMP-04: the employee is excluded from future payroll and insights and can no longer log
+ * in; their open sessions end now. The record and its payroll history are kept.
+ */
+export async function deactivateEmployee(id: number) {
+  const current = await findEmployeeOrThrow(id);
+  if (current.status === 'INACTIVE') throw AppError.conflict('Employee is already inactive');
+
+  const [employee] = await prisma.$transaction([
+    prisma.employee.update({
+      where: { id },
+      data: { status: 'INACTIVE' },
+      include: employeeInclude,
+    }),
+    prisma.session.deleteMany({ where: { account: { employeeId: id } } }),
+  ]);
+  return toEmployeeDetail(employee);
+}
+
+/**
+ * FR-AUTH-06: issues a new one-time temporary password. The employee must change it on next
+ * login (FR-AUTH-04), and any open sessions end.
+ */
+export async function resetEmployeePassword(id: number) {
+  const current = await findEmployeeOrThrow(id);
+  if (current.status === 'INACTIVE') {
+    throw AppError.conflict('Cannot reset the password of a deactivated employee');
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  await prisma.$transaction([
+    prisma.account.update({
+      where: { employeeId: id },
+      data: { passwordHash, mustChangePassword: true },
+    }),
+    prisma.session.deleteMany({ where: { account: { employeeId: id } } }),
+  ]);
+  return { temporaryPassword };
 }
 
 /** FR-EMP-01 / FR-EMP-05: the country must be supported and the structure must belong to it. */
