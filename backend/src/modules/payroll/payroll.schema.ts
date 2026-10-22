@@ -48,6 +48,23 @@ export const saveInputsSchema = z
 
 export type MonthlyInput = z.infer<typeof monthlyInputSchema>;
 
+/** FR-PAY-06: a real calendar date in YYYY-MM-DD form, not in the future. */
+export const disburseSchema = z.object({
+  paymentDate: z
+    .string({ error: 'Payment date is required' })
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Payment date must be in YYYY-MM-DD format')
+    .refine((value) => {
+      // Rejects impossible dates like 2026-02-30, which Date would silently roll over.
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }, 'Payment date is not a real date')
+    .refine(
+      (value) => value <= new Date().toISOString().slice(0, 10),
+      'Payment date cannot be in the future',
+    ),
+});
+
 export const runPayslipParamsSchema = z.object({
   id: idParamSchema.shape.id,
   payslipId: idParamSchema.shape.id,

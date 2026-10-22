@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/requireRole';
 import {
   createRunSchema,
+  disburseSchema,
   listRunPayslipsQuerySchema,
   runPayslipParamsSchema,
   saveInputsSchema,
@@ -11,6 +12,8 @@ import {
 import {
   calculateRun,
   createRun,
+  disburseRun,
+  finaliseRun,
   getRun,
   getRunPayslip,
   listInputs,
@@ -51,6 +54,18 @@ payrollRouter.put('/:id/inputs', async (req, res) => {
 payrollRouter.post('/:id/calculate', async (req, res) => {
   const { id } = idParamSchema.parse(req.params);
   res.json(await calculateRun(id));
+});
+
+// The confirmation step (FR-PAY-04) belongs to the UI; the API acts on an explicit POST.
+payrollRouter.post('/:id/finalise', async (req, res) => {
+  const { id } = idParamSchema.parse(req.params);
+  res.json(await finaliseRun(id));
+});
+
+payrollRouter.post('/:id/disburse', async (req, res) => {
+  const { id } = idParamSchema.parse(req.params);
+  const { paymentDate } = disburseSchema.parse(req.body);
+  res.json(await disburseRun(id, paymentDate));
 });
 
 payrollRouter.get('/:id/payslips', async (req, res) => {

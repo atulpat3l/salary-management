@@ -82,14 +82,19 @@ export function draftPayslip(employee: EmployeeForPayroll): PayslipDraft {
   };
 }
 
-export interface PayslipTotals {
+/**
+ * Payslip totals for one country within a run, as aggregated by the database. Amounts are
+ * whole cents (integers), so adding thousands of payslips stays exact (NFR-03).
+ */
+export interface CountryGroup {
   countryCode: string;
   countryName: string;
   currency: string;
-  gross: DecimalLike;
-  totalDeductions: DecimalLike;
-  net: DecimalLike;
-  flagged: boolean;
+  headcount: number | bigint;
+  flaggedCount: number | bigint;
+  grossCents: number | bigint;
+  totalDeductionsCents: number | bigint;
+  netCents: number | bigint;
 }
 
 export interface CountryTotals {
@@ -103,59 +108,41 @@ export interface CountryTotals {
   net: Money;
 }
 
-/**
- * FR-PAY-03 / NFR-04: headcount and totals grouped by country, each in that country's
- * currency. There is deliberately no grand total of money: it would mix currencies.
- */
-export function summariseByCountry(payslips: PayslipTotals[]) {
-  const groups = new Map<
-    string,
-    {
-      first: PayslipTotals;
-      headcount: number;
-      flagged: number;
-      gross: Decimal;
-      deductions: Decimal;
-      net: Decimal;
-    }
-  >();
+const fromCents = (cents: number | bigint, currency: string) =>
+  toMoney(new Decimal(cents.toString()).div(100), currency);
 
-  for (const payslip of payslips) {
-    const group = groups.get(payslip.countryCode) ?? {
-      first: payslip,
-      headcount: 0,
-      flagged: 0,
-      gross: new Decimal(0),
-      deductions: new Decimal(0),
-      net: new Decimal(0),
-    };
-    if (payslip.currency !== group.first.currency) {
-      throw new Error(`Payslips for ${payslip.countryCode} use more than one currency`);
+/**
+ * FR-PAY-03 / NFR-04: headcount and totals per country, each in that country's currency,
+ * sorted by country name. There is deliberately no grand total of money: it would mix
+ * currencies. Only counts are added up across countries.
+ */
+export function summariseByCountry(groups: CountryGroup[]) {
+  const seen = new Set<string>();
+  for (const group of groups) {
+    if (seen.has(group.countryCode)) {
+      throw new Error(`Payslips for ${group.countryCode} use more than one currency`);
     }
-    group.headcount += 1;
-    if (payslip.flagged) group.flagged += 1;
-    group.gross = group.gross.plus(toDecimal(payslip.gross));
-    group.deductions = group.deductions.plus(toDecimal(payslip.totalDeductions));
-    group.net = group.net.plus(toDecimal(payslip.net));
-    groups.set(payslip.countryCode, group);
+    seen.add(group.countryCode);
   }
 
-  const byCountry: CountryTotals[] = [...groups.values()]
-    .map(({ first, headcount, flagged, gross, deductions, net }) => ({
-      countryCode: first.countryCode,
-      countryName: first.countryName,
-      currency: first.currency,
-      headcount,
-      flaggedCount: flagged,
-      gross: toMoney(gross, first.currency),
-      totalDeductions: toMoney(deductions, first.currency),
-      net: toMoney(net, first.currency),
+  const byCountry: CountryTotals[] = groups
+    .map((group) => ({
+      countryCode: group.countryCode,
+      countryName: group.countryName,
+      currency: group.currency,
+      headcount: Number(group.headcount),
+      flaggedCount: Number(group.flaggedCount),
+      gross: fromCents(group.grossCents, group.currency),
+      totalDeductions: fromCents(group.totalDeductionsCents, group.currency),
+      net: fromCents(group.netCents, group.currency),
     }))
     .sort((a, b) => a.countryName.localeCompare(b.countryName));
 
   return {
-    headcount: payslips.length,
-    flaggedCount: payslips.filter((p) => p.flagged).length,
+    headcount: byCountry.reduce((sum, c) => sum + c.headcount, 0),
+    flaggedCount: byCountry.reduce((sum, c) => sum + c.flaggedCount, 0),
     byCountry,
   };
 }
+
+export type RunSummary = ReturnType<typeof summariseByCountry>;

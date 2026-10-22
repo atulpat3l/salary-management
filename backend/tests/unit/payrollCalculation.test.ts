@@ -2,7 +2,7 @@ import {
   draftPayslip,
   summariseByCountry,
   type EmployeeForPayroll,
-  type PayslipTotals,
+  type CountryGroup,
 } from '../../src/modules/payroll/payroll.calculation';
 import { usStandard } from '../fixtures/structures';
 
@@ -91,34 +91,33 @@ describe('draftPayslip — FR-PAY-02', () => {
 });
 
 describe('summariseByCountry — FR-PAY-03 / NFR-04', () => {
-  const payslip = (
-    countryCode: string,
-    net: string,
-    extra: Partial<PayslipTotals> = {},
-  ): PayslipTotals => {
-    const meta: Record<string, [string, string]> = {
-      US: ['United States', 'USD'],
-      IN: ['India', 'INR'],
-      DE: ['Germany', 'EUR'],
-    };
-    return {
-      countryCode,
-      countryName: meta[countryCode][0],
-      currency: meta[countryCode][1],
-      gross: net,
-      totalDeductions: '0',
-      net,
-      flagged: false,
-      ...extra,
-    };
+  const META: Record<string, [string, string]> = {
+    US: ['United States', 'USD'],
+    IN: ['India', 'INR'],
+    DE: ['Germany', 'EUR'],
   };
+  const group = (
+    countryCode: string,
+    headcount: number,
+    netCents: number | bigint,
+    extra: Partial<CountryGroup> = {},
+  ): CountryGroup => ({
+    countryCode,
+    countryName: META[countryCode][0],
+    currency: META[countryCode][1],
+    headcount,
+    flaggedCount: 0,
+    grossCents: netCents,
+    totalDeductionsCents: 0,
+    netCents,
+    ...extra,
+  });
 
-  it('totals each country separately, in its own currency, sorted by country name', () => {
+  it('shows each country in its own currency, sorted by country name', () => {
     const summary = summariseByCountry([
-      payslip('US', '1000.10'),
-      payslip('IN', '50000'),
-      payslip('US', '2000.20'),
-      payslip('DE', '3000'),
+      group('US', 2, 300030),
+      group('IN', 1, 5000000),
+      group('DE', 1, 300000),
     ]);
 
     expect(summary.headcount).toBe(4);
@@ -127,44 +126,47 @@ describe('summariseByCountry — FR-PAY-03 / NFR-04', () => {
       expect.objectContaining({
         countryName: 'India',
         currency: 'INR',
-        headcount: 1,
         net: { amount: '50000.00', currency: 'INR' },
       }),
       expect.objectContaining({
         countryName: 'United States',
-        currency: 'USD',
         headcount: 2,
         net: { amount: '3000.30', currency: 'USD' },
       }),
     ]);
   });
 
-  it('adds amounts exactly (no floating-point drift)', () => {
-    const many = Array.from({ length: 10 }, () => payslip('US', '0.10'));
-    expect(summariseByCountry(many).byCountry[0].net.amount).toBe('1.00');
+  it('turns whole cents back into exact amounts, even beyond JavaScript’s safe integers', () => {
+    const huge = 123456789012345678n; // cents
+    const [us] = summariseByCountry([group('US', 1, huge)]).byCountry;
+    expect(us.net.amount).toBe('1234567890123456.78');
+  });
+
+  it('keeps negative totals (flagged runs)', () => {
+    const [us] = summariseByCountry([group('US', 1, -400000, { flaggedCount: 1 })]).byCountry;
+    expect(us.net).toEqual({ amount: '-4000.00', currency: 'USD' });
   });
 
   it('counts flagged employees overall and per country', () => {
     const summary = summariseByCountry([
-      payslip('US', '-5', { flagged: true }),
-      payslip('US', '10'),
-      payslip('IN', '-1', { flagged: true }),
+      group('US', 3, 1, { flaggedCount: 1 }),
+      group('IN', 2, 1, { flaggedCount: 2n }),
     ]);
-    expect(summary.flaggedCount).toBe(2);
+    expect(summary.flaggedCount).toBe(3);
     expect(summary.byCountry.map((c) => [c.countryCode, c.flaggedCount])).toEqual([
-      ['IN', 1],
+      ['IN', 2],
       ['US', 1],
     ]);
   });
 
-  it('never produces a total that mixes currencies', () => {
-    const summary = summariseByCountry([payslip('US', '1'), payslip('IN', '1')]);
+  it('never produces a money total that mixes currencies', () => {
+    const summary = summariseByCountry([group('US', 1, 100), group('IN', 1, 100)]);
     expect(Object.keys(summary).sort()).toEqual(['byCountry', 'flaggedCount', 'headcount']);
   });
 
-  it('refuses payslips of one country in two currencies', () => {
+  it('refuses a country that appears in two currencies', () => {
     expect(() =>
-      summariseByCountry([payslip('US', '1'), payslip('US', '1', { currency: 'EUR' })]),
+      summariseByCountry([group('US', 1, 100), group('US', 1, 100, { currency: 'EUR' })]),
     ).toThrow(/more than one currency/);
   });
 
