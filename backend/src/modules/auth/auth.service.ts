@@ -2,8 +2,8 @@ import { env } from '../../config/env';
 import type { Role } from '../../domain/constants';
 import { AppError } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
-import type { LoginInput } from './auth.schema';
-import { getDummyHash, verifyPassword } from './password';
+import type { ChangePasswordInput, LoginInput } from './auth.schema';
+import { getDummyHash, hashPassword, verifyPassword } from './password';
 import { signToken } from './token';
 
 /** Who is making the request. Attached to `req.auth` by the authenticate middleware. */
@@ -82,6 +82,30 @@ export async function resolveSession(sessionId: string, now = new Date()): Promi
     employeeId: account.employeeId,
     mustChangePassword: account.mustChangePassword,
   };
+}
+
+/**
+ * FR-AUTH-04/05: replaces the password after checking the current one, clears the forced-change
+ * flag and ends every other session (e.g. one opened by whoever knew the temporary password).
+ */
+export async function changePassword(auth: AuthContext, input: ChangePasswordInput) {
+  const account = await prisma.account.findUniqueOrThrow({ where: { id: auth.accountId } });
+  if (!(await verifyPassword(input.currentPassword, account.passwordHash))) {
+    throw AppError.validation('Current password is incorrect', {
+      currentPassword: 'Current password is incorrect',
+    });
+  }
+
+  const passwordHash = await hashPassword(input.newPassword);
+  await prisma.$transaction([
+    prisma.account.update({
+      where: { id: auth.accountId },
+      data: { passwordHash, mustChangePassword: false },
+    }),
+    prisma.session.deleteMany({
+      where: { accountId: auth.accountId, id: { not: auth.sessionId } },
+    }),
+  ]);
 }
 
 /** FR-AUTH-03: ends the session; the token stops working immediately. */

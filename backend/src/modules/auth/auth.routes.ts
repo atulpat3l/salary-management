@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { env } from '../../config/env';
-import { authenticate, getAuth } from '../../middleware/authenticate';
+import { authenticateAllowingPasswordChange, getAuth } from '../../middleware/authenticate';
 import { createLoginRateLimiter } from '../../middleware/loginRateLimiter';
-import { loginSchema } from './auth.schema';
-import { getCurrentUser, login, logout } from './auth.service';
+import { changePasswordSchema, loginSchema } from './auth.schema';
+import { changePassword, getCurrentUser, login, logout } from './auth.service';
 
 export function createAuthRouter() {
   const router = Router();
@@ -12,13 +12,20 @@ export function createAuthRouter() {
     res.json(await login(loginSchema.parse(req.body)));
   });
 
-  router.post('/logout', authenticate, async (req, res) => {
+  // The routes below stay usable while a password change is pending (FR-AUTH-04),
+  // so the user can see why, change it, or log out.
+  router.post('/logout', authenticateAllowingPasswordChange, async (req, res) => {
     await logout(getAuth(req).sessionId);
     res.status(204).end();
   });
 
-  router.get('/me', authenticate, async (req, res) => {
+  router.get('/me', authenticateAllowingPasswordChange, async (req, res) => {
     res.json(await getCurrentUser(getAuth(req).accountId));
+  });
+
+  router.post('/change-password', authenticateAllowingPasswordChange, async (req, res) => {
+    await changePassword(getAuth(req), changePasswordSchema.parse(req.body));
+    res.status(204).end();
   });
 
   return router;
