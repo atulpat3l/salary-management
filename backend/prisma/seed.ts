@@ -1,13 +1,13 @@
 /**
- * Seed data (FR-DATA-01). Safe to run repeatedly: every record is upserted.
- * So far it creates countries, salary structures and the HR login; employees and payroll
- * history are added in later steps.
+ * Seed data (FR-DATA-01). Deterministic and repeatable: running it again resets the demo data
+ * to the same known state. All data is fictional.
  */
 import { prisma } from '../src/lib/prisma';
 import { hashPassword } from '../src/modules/auth/password';
+import { DEMO_EMPLOYEE_PASSWORD, DEMO_EMPLOYEES, seedDemoData } from './seed/seedDemoData';
 import { seedReferenceData } from './seed/seedReferenceData';
 
-/** Documented demo credentials (README). Fictional data only. */
+/** Documented demo credentials (README). */
 export const DEMO_HR = { loginId: 'HR001', password: 'HrAdmin123' };
 
 async function seedHrAccount() {
@@ -17,15 +17,28 @@ async function seedHrAccount() {
     update: { passwordHash, role: 'HR', mustChangePassword: false },
     create: { loginId: DEMO_HR.loginId, passwordHash, role: 'HR', mustChangePassword: false },
   });
-  console.log(`HR account: ${DEMO_HR.loginId} / ${DEMO_HR.password}`);
 }
 
 async function main() {
-  const counts = await seedReferenceData();
-  console.log(
-    `Reference data: ${counts.countries} countries, ${counts.structures} salary structures`,
-  );
+  const started = Date.now();
+
+  const reference = await seedReferenceData();
+  console.log(`Countries: ${reference.countries} · Salary structures: ${reference.structures}`);
+
+  const demo = await seedDemoData();
+  console.log(`Employees: ${demo.employees} (${demo.active} active)`);
+  console.log(`Payroll finalised and paid for: ${demo.payrollMonths.join(', ')}`);
+
   await seedHrAccount();
+  console.log('\nDemo logins');
+  console.log(`  HR        ${DEMO_HR.loginId} / ${DEMO_HR.password}`);
+  DEMO_EMPLOYEES.forEach((employee, index) => {
+    const code = `EMP${String(index + 1).padStart(5, '0')}`;
+    console.log(
+      `  Employee  ${code} / ${DEMO_EMPLOYEE_PASSWORD}  (${employee.fullName}, ${employee.countryCode})`,
+    );
+  });
+  console.log(`\nDone in ${((Date.now() - started) / 1000).toFixed(1)} s`);
 }
 
 main()
