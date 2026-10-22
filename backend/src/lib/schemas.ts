@@ -28,24 +28,40 @@ export function requiredTextSchema(label: string, maxLength: number) {
 const MAX_INTEGER_DIGITS = 12;
 
 /**
- * A money amount in the employee's currency: greater than zero with at most two decimal places
- * (FR-EMP-05). Accepts a number or numeric string and returns a string, so no precision is lost.
+ * A decimal number with at most two decimal places, e.g. a money amount in the employee's
+ * currency. Accepts a number or numeric string and returns a string, so no precision is lost.
  */
-export function positiveAmountSchema(label: string) {
+function decimalSchema(label: string, { allowZero, max }: { allowZero: boolean; max?: number }) {
+  let schema = z
+    .string()
+    .min(1, `${label} is required`)
+    .regex(/^-?\d+(\.\d+)?$/, `${label} must be a number`)
+    .refine((value) => !/\.\d{3,}$/.test(value), {
+      message: `${label} can have at most two decimal places`,
+    })
+    .refine((value) => (allowZero ? Number(value) >= 0 : Number(value) > 0), {
+      message: allowZero ? `${label} cannot be negative` : `${label} must be greater than zero`,
+    })
+    .refine((value) => value.replace('-', '').split('.')[0].length <= MAX_INTEGER_DIGITS, {
+      message: `${label} is too large`,
+    });
+  if (max !== undefined) {
+    schema = schema.refine((value) => Number(value) <= max, {
+      message: `${label} must be at most ${max}`,
+    });
+  }
   return z
     .union([z.string(), z.number()], { error: `${label} is required` })
     .transform((value) => String(value).trim())
-    .pipe(
-      z
-        .string()
-        .min(1, `${label} is required`)
-        .regex(/^-?\d+(\.\d+)?$/, `${label} must be a number`)
-        .refine((value) => !/\.\d{3,}$/.test(value), {
-          message: `${label} can have at most two decimal places`,
-        })
-        .refine((value) => Number(value) > 0, { message: `${label} must be greater than zero` })
-        .refine((value) => value.split('.')[0].length <= MAX_INTEGER_DIGITS, {
-          message: `${label} is too large`,
-        }),
-    );
+    .pipe(schema);
+}
+
+/** Greater than zero, at most two decimals (FR-EMP-05: annual base salary). */
+export function positiveAmountSchema(label: string) {
+  return decimalSchema(label, { allowZero: false });
+}
+
+/** Zero or more, at most two decimals, optionally capped (FR-PAY-01: monthly inputs). */
+export function nonNegativeDecimalSchema(label: string, max?: number) {
+  return decimalSchema(label, { allowZero: true, max });
 }

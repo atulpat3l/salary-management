@@ -70,9 +70,11 @@ model Employee {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  country   Country         @relation(fields: [countryCode], references: [code])
-  structure SalaryStructure @relation(fields: [structureId], references: [id])
-  account   Account?
+  country       Country         @relation(fields: [countryCode], references: [code])
+  structure     SalaryStructure @relation(fields: [structureId], references: [id])
+  account       Account?
+  payrollInputs PayrollInput[]
+  payslips      Payslip[]
 
   @@index([countryCode, status])
   @@index([fullName])
@@ -105,4 +107,84 @@ model Session {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+}
+
+/// One payroll run per calendar month (A7, FR-PAY-04). Status only moves forward:
+/// DRAFT → FINALISED → DISBURSED (FR-PAY-06).
+model PayrollRun {
+  id           Int       @id @default(autoincrement())
+  month        String    @unique // "YYYY-MM"
+  status       String    @default("DRAFT") // DRAFT | FINALISED | DISBURSED
+  calculatedAt DateTime?
+  finalisedAt  DateTime?
+  disbursedAt  DateTime?
+  paymentDate  DateTime? // the date HR records as the payment date
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  inputs   PayrollInput[]
+  payslips Payslip[]
+}
+
+/// One employee's variable inputs for a month (FR-PAY-01). No row means the defaults apply:
+/// 0 overtime hours, 0 bonus, 100% variable pay achievement.
+model PayrollInput {
+  id             Int     @id @default(autoincrement())
+  runId          Int
+  employeeId     Int
+  overtimeHours  Decimal @default(0)
+  bonus          Decimal @default(0) // in the employee's currency
+  achievementPct Decimal @default(100)
+
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id])
+
+  @@unique([runId, employeeId])
+}
+
+/// One employee's pay for one run. Every value shown on the payslip is copied here when it is
+/// issued, so later changes to the employee never alter it (FR-PAY-05).
+model Payslip {
+  id               Int      @id @default(autoincrement())
+  runId            Int
+  employeeId       Int
+  employeeCode     String
+  fullName         String
+  jobTitle         String
+  countryCode      String
+  countryName      String
+  currency         String
+  structureName    String
+  annualBaseSalary Decimal
+  overtimeHours    Decimal
+  bonus            Decimal
+  achievementPct   Decimal
+  gross            Decimal
+  totalDeductions  Decimal
+  net              Decimal
+  flagged          Boolean // deductions exceed gross pay; blocks finalising (FR-PAY-02)
+  createdAt        DateTime @default(now())
+
+  run      PayrollRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id])
+  lines    PayslipLine[]
+
+  @@unique([runId, employeeId])
+  @@index([employeeId])
+  @@index([runId, countryCode])
+}
+
+/// One earning or deduction line of a payslip, as calculated (PRD §5.7).
+model PayslipLine {
+  id          Int     @id @default(autoincrement())
+  payslipId   Int
+  kind        String // BASE | EARNING | VARIABLE | OVERTIME | BONUS | DEDUCTION
+  label       String
+  calculation String
+  amount      Decimal
+  sortOrder   Int
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@index([payslipId])
 }

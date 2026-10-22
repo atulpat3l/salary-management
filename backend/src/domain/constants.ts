@@ -7,6 +7,10 @@ export type Role = (typeof ROLES)[number];
 export const EMPLOYEE_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
+/** FR-PAY-06: a run only moves forward, DRAFT → FINALISED → DISBURSED. */
+export const PAYROLL_STATUSES = ['DRAFT', 'FINALISED', 'DISBURSED'] as const;
+export type PayrollStatus = (typeof PAYROLL_STATUSES)[number];
+
 export const STRUCTURE_STYLES = ['STANDARD', 'SALES', 'HOURLY'] as const;
 export type StructureStyle = (typeof STRUCTURE_STYLES)[number];
 
