@@ -11,9 +11,10 @@ type SqlValue = string | number | boolean | null;
 /**
  * Inserts many rows with multi-row INSERT statements.
  *
- * Why not `createMany`? Through the libsql adapter it inserts roughly one row at a time:
- * a 10,000-employee payroll (10k payslips + ~70k lines) took ~90 s that way and ~4 s with
- * this, which is what keeps NFR-02 (under one minute) achievable.
+ * Why not `createMany`? Through Prisma's SQLite driver adapters (measured with both libsql and
+ * better-sqlite3) it inserts roughly one row at a time: ~67k payslip lines took 81 s that way,
+ * while a whole 10,000-employee payroll (10k payslips + ~70k lines) takes ~3 s with this.
+ * That is what keeps NFR-02 (under one minute) achievable.
  *
  * Values are always bound parameters. Table and column names come from our own code and are
  * still checked, so this can never be used to inject SQL.
