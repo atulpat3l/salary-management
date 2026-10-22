@@ -6,6 +6,8 @@ import { prisma } from './lib/prisma';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { createAuthRouter } from './modules/auth/auth.routes';
+import { countriesRouter } from './modules/countries/countries.routes';
+import { structuresRouter } from './modules/structures/structures.routes';
 
 export function createApp() {
   const app = express();
@@ -21,6 +23,8 @@ export function createApp() {
   });
 
   app.use('/api/auth', createAuthRouter());
+  app.use('/api/countries', countriesRouter);
+  app.use('/api/structures', structuresRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

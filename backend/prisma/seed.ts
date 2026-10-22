@@ -1,10 +1,11 @@
 /**
- * Seed data  Safe to run repeatedly: every record is upserted.
- * So far it only creates the HR login; countries, structures, employees and payroll history
- * are added in later steps.
+ * Seed data (FR-DATA-01). Safe to run repeatedly: every record is upserted.
+ * So far it creates countries, salary structures and the HR login; employees and payroll
+ * history are added in later steps.
  */
 import { prisma } from '../src/lib/prisma';
 import { hashPassword } from '../src/modules/auth/password';
+import { seedReferenceData } from './seed/seedReferenceData';
 
 /** Documented demo credentials (README). Fictional data only. */
 export const DEMO_HR = { loginId: 'HR001', password: 'HrAdmin123' };
@@ -20,6 +21,10 @@ async function seedHrAccount() {
 }
 
 async function main() {
+  const counts = await seedReferenceData();
+  console.log(
+    `Reference data: ${counts.countries} countries, ${counts.structures} salary structures`,
+  );
   await seedHrAccount();
 }
 
