@@ -1,6 +1,7 @@
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  '@prisma/engines': set this to true or false
-  esbuild: set this to true or false
-  prisma: set this to true or false
-  unrs-resolver: set this to true or false
+  '@parcel/watcher': false
+  '@prisma/engines': false
+  better-sqlite3: true
+  esbuild: false
+  prisma: false
+  unrs-resolver: false
