@@ -2,6 +2,8 @@
 
 A salary and payroll tool for HR teams, with self-service for employees.
 
+**Live demo:** https://salary-mngmt.netlify.app/
+
 - **HR** manage employees, run monthly payroll, view salary structures and salary insights.
 - **Employees** see their payslips, payment history and profile.
 
