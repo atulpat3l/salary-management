@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     // The backend runs on :4000 in development; proxying keeps API calls same-origin.
     proxy: {
-      '/api': 'http://localhost:4000',
+      '/api': 'https://salary-management-rf1a.onrender.com',
     },
   },
 })
