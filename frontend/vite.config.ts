@@ -8,7 +8,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
+    },
+  },
+  server: {
+    // The backend runs on :4000 in development; proxying keeps API calls same-origin.
+    proxy: {
+      '/api': 'http://localhost:4000',
     },
   },
 })
